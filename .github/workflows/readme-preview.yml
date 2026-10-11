@@ -1,0 +1,65 @@
+name: Generate README motion preview
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/readme-preview.yml"
+      - "docs/showcase/roadpulse-demo.mp4"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Turn existing annotated MP4 into an animated README preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s docs/showcase/roadpulse-demo.mp4
+          command -v ffmpeg
+          ffmpeg -hide_banner -loglevel error -nostdin -y -threads 1 \
+            -ss 2 -t 8 -i docs/showcase/roadpulse-demo.mp4 \
+            -filter_complex "[0:v]fps=6,scale=640:-2:flags=lanczos,split[gif][pal];[pal]palettegen=max_colors=96:stats_mode=diff[p];[gif][p]paletteuse=dither=bayer:bayer_scale=3" \
+            -loop 0 docs/showcase/roadpulse-preview.gif
+          if [ "$(stat -c '%s' docs/showcase/roadpulse-preview.gif)" -gt 9000000 ]; then
+            ffmpeg -hide_banner -loglevel error -nostdin -y -threads 1 \
+              -ss 2 -t 6 -i docs/showcase/roadpulse-demo.mp4 \
+              -filter_complex "[0:v]fps=4,scale=480:-2:flags=lanczos,split[gif][pal];[pal]palettegen=max_colors=64:stats_mode=diff[p];[gif][p]paletteuse=dither=bayer:bayer_scale=3" \
+              -loop 0 docs/showcase/roadpulse-preview.gif
+          fi
+          test "$(stat -c '%s' docs/showcase/roadpulse-preview.gif)" -lt 9000000
+          python3 - <<'PY'
+          from pathlib import Path
+          page = Path("README.md")
+          text = page.read_text(encoding="utf-8")
+          previous = "[![Watch the authentic RoadPulse AI traffic demonstration](docs/showcase/poster.jpg)](docs/showcase/roadpulse-demo.mp4)"
+          animated = "[![RoadPulse AI real traffic analysis — animated preview; click to watch MP4](docs/showcase/roadpulse-preview.gif)](docs/showcase/roadpulse-demo.mp4)"
+          if previous in text:
+              text = text.replace(previous, animated, 1)
+          elif animated not in text:
+              raise SystemExit("README target not found; refusing silent edit")
+          anchor = animated + "\n\n"
+          caption = "**Real recorded output.** Animated preview above; [watch the full annotated MP4](docs/showcase/roadpulse-demo.mp4) or [open the dedicated video player](docs/index.html).\n\n"
+          if anchor in text and caption not in text:
+              text = text.replace(anchor, anchor + caption, 1)
+          page.write_text(text, encoding="utf-8")
+          PY
+      - name: Commit verified animated preview and README
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- README.md docs/showcase/roadpulse-preview.gif
+          if ! git diff --cached --quiet; then
+            git commit -m "docs: embed authentic animated video preview in README"
+            git push origin HEAD:main
+          fi
