@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="RoadPulse AI: real local traffic video detection, multi-object tracking and crossing analytics.">
+  <title>RoadPulse AI — Real Traffic Analysis Demo</title>
+  <style>
+    :root { color-scheme:dark; font-family:Inter,Arial,sans-serif; background:#071215; color:#f0f7f5; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:radial-gradient(ellipse at 76% 0%,#17423480,transparent 42%),#071215; }
+    a { color:#7beac0; } a:hover { color:#baffd7; }
+    .container { max-width:1160px; margin:auto; padding:0 26px 70px; }
+    header { display:flex; align-items:center; justify-content:space-between; padding:25px 0; border-bottom:1px solid #29433f; }
+    .brand { font-weight:800; letter-spacing:.09em; font-size:16px; }
+    .brand span,.accent { color:#7beac0; }
+    .links a { margin-left:20px; text-decoration:none; font-size:13px; }
+    .eyebrow { font-size:11px; letter-spacing:.18em; color:#7beac0; margin-bottom:12px; text-transform:uppercase; font-weight:700; }
+    .hero { padding:62px 0 33px; }
+    h1 { font-size:clamp(37px,6vw,66px); line-height:1.09; letter-spacing:-.05em; max-width:900px; margin:0 0 24px; }
+    .lede { max-width:710px; font-size:17px; color:#b1c6c1; line-height:1.7; }
+    .notice { display:flex; align-items:center; gap:10px; color:#a4c3b9; font-size:13px; margin:24px 0 13px; }
+    .signal { width:8px; height:8px; background:#70dbae; border-radius:50%; display:inline-block; flex:none; }
+    .player { border:1px solid #2b4940; background:#102021; border-radius:18px; overflow:hidden; }
+    video { display:block; width:100%; aspect-ratio:16/9; background:#091314; }
+    .media-bottom { display:flex; gap:12px; justify-content:space-between; align-items:center; padding:17px 20px; flex-wrap:wrap; }
+    .media-bottom p { margin:0; color:#b1c6c1; font-size:13px; }
+    .button { padding:11px 17px; display:inline-block; border:1px solid #416b5d; border-radius:9px; text-decoration:none; font-size:13px; font-weight:700; color:#e6fdf0; }
+    .button:hover { background:#25423b; }
+    h2 { font-size:23px; letter-spacing:-.03em; margin:42px 0 18px; }
+    .grid { display:grid; gap:12px; grid-template-columns:repeat(4,minmax(0,1fr)); }
+    .stat { background:#112326; border:1px solid #27443f; padding:22px; border-radius:14px; }
+    .stat strong { font-size:34px; letter-spacing:-.04em; display:block; margin-top:10px; }
+    .stat small { color:#aac0ba; font-size:12px; }
+    .pipeline { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; }
+    .step { border:1px solid #26443b; border-radius:11px; padding:15px 13px; color:#c9ddd7; font-size:13px; }
+    .step b { color:#7beac0; display:block; font-size:11px; margin-bottom:11px; }
+    footer { border-top:1px solid #29433f; margin-top:55px; padding:23px 0; color:#98b3aa; font-size:12px; line-height:1.8; }
+    @media(max-width:700px) { .grid {grid-template-columns:repeat(2,1fr)} .pipeline {grid-template-columns:1fr 1fr} .links a {margin-left:12px} .hero {padding-top:36px;} }
+  </style>
+</head>
+<body>
+<div class="container">
+<header><div class="brand">ROADPULSE <span>AI</span></div><nav class="links"><a href="https://github.com/Bjorjank/RoadPulse-AI">Source code ↗</a><a href="https://edgarerlangga.com/portfolio.html">Portfolio ↗</a></nav></header>
+<main>
+  <section class="hero">
+    <div class="eyebrow">Computer vision / Local-first analytics</div>
+    <h1>Every movement.<br><span class="accent">A clearer picture.</span></h1>
+    <p class="lede">See how RoadPulse AI transforms real road footage into detected vehicles, stable tracking identities, directional crossings, and structured traffic insights. This is actual annotated processing output, not a simulated live interface.</p>
+  </section>
+  <div class="notice"><span class="signal"></span><span id="demo-status">Preparing recorded demo…</span></div>
+  <section class="player" aria-label="RoadPulse AI annotated demonstration video">
+    <video id="demo-video" controls playsinline preload="none" poster="showcase/poster.jpg">
+      <source src="showcase/roadpulse-demo.mp4" type="video/mp4">
+      Your browser does not support MP4 playback.
+    </video>
+    <div class="media-bottom">
+      <p>Recorded local processing · YOLOX-Tiny + ByteTrack · source footage: Faruk Yıldız / Pexels</p>
+      <a class="button" href="showcase/roadpulse-demo.mp4" download>Download demo MP4 ↓</a>
+    </div>
+  </section>
+  <h2>Actual analysis <span class="accent">/ event counts</span></h2>
+  <section class="grid" aria-label="Original processed video metrics">
+    <div class="stat"><small>Total crossings</small><strong id="total">—</strong></div>
+    <div class="stat"><small>Cars</small><strong id="cars">—</strong></div>
+    <div class="stat"><small>Buses</small><strong id="buses">—</strong></div>
+    <div class="stat"><small>Trucks + motorcycles</small><strong id="other">—</strong></div>
+  </section>
+  <p style="color:#afc4bc;line-height:1.6;margin-top:14px;font-size:13px;">Values load from the original completed job's saved JSON and crossing-event CSV, not from demo placeholders. Counts represent algorithmic crossing events and are not independently certified vehicle totals. If the video was resized for publication, the original job's analytics remain unchanged.</p>
+  <h2>How it works</h2>
+  <section class="pipeline">
+    <div class="step"><b>01 · INPUT</b>Traffic MP4 uploaded locally</div>
+    <div class="step"><b>02 · DETECT</b>YOLOX-Tiny vehicle detection</div>
+    <div class="step"><b>03 · TRACK</b>ByteTrack assigns temporary IDs</div>
+    <div class="step"><b>04 · COUNT</b>Finite-line directional crossings</div>
+    <div class="step"><b>05 · EXPORT</b>H.264 MP4, events CSV and JSON</div>
+  </section>
+  <div style="margin-top:24px;display:flex;gap:12px;flex-wrap:wrap;">
+    <a class="button" href="showcase/sample-events.csv">Crossing events CSV ↓</a>
+    <a class="button" href="showcase/sample-summary.json">Analysis JSON ↓</a>
+    <a class="button" href="showcase/MEDIA_PROVENANCE.md">Media provenance ↗</a>
+    <a class="button" href="https://github.com/Bjorjank/RoadPulse-AI">Explore GitHub repository ↗</a>
+  </div>
+</main>
+<footer>
+  Source traffic footage: <a href="https://www.pexels.com/video/busy-urban-highway-with-flowing-traffic-29607724/">Busy Urban Highway with Flowing Traffic, Faruk Yıldız</a>, under the <a href="https://www.pexels.com/license/">Pexels License</a>.
+  The footage creator does not endorse RoadPulse AI. This is an engineering demonstration, not a traffic-enforcement or accuracy-certified system.
+</footer>
+</div>
+<script>
+  const status = document.getElementById("demo-status");
+  const video = document.getElementById("demo-video");
+  video.addEventListener("error", () => {
+    status.textContent = "The demo MP4 is not available yet. See the GitHub repository.";
+  });
+  fetch("showcase/sample-summary.json", {cache:"no-store"}).then(response => {
+    if (!response.ok) throw new Error("Analysis assets not yet published");
+    return response.json();
+  }).then(data => {
+    if (!Number.isFinite(data.total_crossings)) throw new Error("Invalid analysis summary");
+    document.getElementById("total").textContent = String(data.total_crossings);
+    document.getElementById("cars").textContent = String(data.counts.car ?? 0);
+    document.getElementById("buses").textContent = String(data.counts.bus ?? 0);
+    document.getElementById("other").textContent = String((data.counts.truck ?? 0) + (data.counts.motorcycle ?? 0));
+    status.textContent = "Real analyzed footage · " + data.frames_processed + " frames processed";
+    if (Array.isArray(data.decode_warnings) && data.decode_warnings.length)
+      status.textContent += " · Partial decode warning";
+  }).catch(() => {status.textContent = "Awaiting verified local demo assets (MP4 + CSV + JSON).";});
+</script>
+</body>
+</html>
