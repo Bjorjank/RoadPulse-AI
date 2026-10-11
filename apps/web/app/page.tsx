@@ -17,6 +17,7 @@ const classes=[{key:"car",label:"Cars",symbol:"\u25b0",color:"#4ee1b2"},{key:"mo
 export default function Dashboard(){
   const [system,setSystem]=useState<System|null>(null);
   const [job,setJob]=useState<Job|null>(null);
+  const [history,setHistory]=useState<Job[]>([]);
   const [points,setPoints]=useState<Point[]>([]);
   const [error,setError]=useState("");
   const [busy,setBusy]=useState(false);
@@ -29,6 +30,14 @@ export default function Dashboard(){
     api<System>("system").then(info=>{setSystem(info);setMode(info.default_mode??"standard");}).catch(e=>setError(e.message));
     let saved:string|null=null;
     try{saved=localStorage.getItem("roadpulse.v1.job");}catch{/* Storage can be disabled by browser preferences. */}
+    api<Job[]>("jobs").then(list=>{
+      setHistory(list);
+      if(!saved&&list.length){
+        const recent=list[0];
+        setJob(recent);setMode(recent.mode??"standard");
+        if(recent.line)setPoints(recent.line.map(([x,y])=>({x,y})));
+      }
+    }).catch(()=>{});
     if(saved&&/^[0-9a-f]{32}$/.test(saved)){
       api<Job>(`jobs/${saved}`).then(restored=>{setJob(restored);setMode(restored.mode??"standard");if(restored.line)setPoints(restored.line.map(([x,y])=>({x,y})));}).catch(()=>{try{localStorage.removeItem("roadpulse.v1.job");}catch{}});
     }
@@ -40,7 +49,11 @@ export default function Dashboard(){
     const controller=new AbortController();
     let timer:ReturnType<typeof setTimeout>;
     async function poll(){
-      try{const next=await api<Job>(`jobs/${id}`,{signal:controller.signal});setJob(next);if(next.status==="QUEUED"||next.status==="RUNNING")timer=setTimeout(poll,1000);}
+      try{const next=await api<Job>(`jobs/${id}`,{signal:controller.signal});setJob(next);
+        if(next.status==="COMPLETED"||next.status==="FAILED"||next.status==="CANCELLED"){
+          api<Job[]>("jobs").then(setHistory).catch(()=>{});
+        }
+        if(next.status==="QUEUED"||next.status==="RUNNING")timer=setTimeout(poll,1000);}
       catch(e){if(!controller.signal.aborted){setError((e as Error).message);timer=setTimeout(poll,2000);}}
     }
     timer=setTimeout(poll,700);
@@ -49,8 +62,14 @@ export default function Dashboard(){
   useEffect(()=>()=>{if(original)URL.revokeObjectURL(original);},[original]);
   async function upload(file:File){
     setBusy(true);setError("");
-    try{const form=new FormData();form.append("file",file);const next=await api<Job>("jobs",{method:"POST",body:form});setJob(next);try{localStorage.setItem("roadpulse.v1.job",next.id);}catch{}setPoints([]);setOriginal(URL.createObjectURL(file));setShowOriginal(false);}
+    try{const form=new FormData();form.append("file",file);const next=await api<Job>("jobs",{method:"POST",body:form});setJob(next);setHistory(previous=>[next,...previous.filter(item=>item.id!==next.id)].slice(0,12));try{localStorage.setItem("roadpulse.v1.job",next.id);}catch{}setPoints([]);setOriginal(URL.createObjectURL(file));setShowOriginal(false);}
     catch(e){setError((e as Error).message);}finally{setBusy(false);}
+  }
+  function openSaved(saved:Job){
+    setJob(saved);setMode(saved.mode??"standard");
+    setPoints(saved.line?saved.line.map(([x,y])=>({x,y})):[]);
+    setShowOriginal(false);setOriginal(null);setError("");
+    try{localStorage.setItem("roadpulse.v1.job",saved.id);}catch{}
   }
   async function start(){
     if(!job||points.length!==2)return;
@@ -71,6 +90,7 @@ export default function Dashboard(){
     <div className="main-shell"><header className="topbar"><div><strong>ROADPULSE<span className="accent"> AI</span></strong><span className="header-separator">/</span><span className="muted">Traffic intelligence</span></div><div className="status-pill"><i className={system?"dot":"dot offline"}/>{system?"Local system online":"Connecting to local API"}</div></header>
     <main><div className="page-heading"><div><div className="eyebrow">OBSERVE. UNDERSTAND. MOVE FORWARD.</div><h1>Every movement.<br className="mobile-break"/> A clearer picture<span className="accent">.</span></h1><p className="muted">Turn traffic footage into actionable intelligence. Privately, on your machine.</p></div><div className="profile-card"><span className="chip">{(active||completed?job?.mode??"standard":mode).toUpperCase()}</span><strong>YOLOX-Tiny</strong><small>{(result?.provider??job?.provider)?.replace("ExecutionProvider","")??"Provider selected at analysis"}</small></div></div>
     <div className="overview-grid"><section className="total-card"><div className="eyebrow">TOTAL CROSSINGS</div><div className="total-value">{result?.total??"\u2014"}<span>Ã¢â€ â€”</span></div><small>{result?"Computed from tracked line-crossing events":"Awaiting your first analysis"}</small></section>{classes.map(item=><section className="stat-card" key={item.key}><div className="stat-top"><span>{item.label}</span><span style={{color:item.color}}>{item.symbol}</span></div><strong>{result?.counts[item.key]??"\u2014"}</strong><div className="mini-rule" style={{background:item.color}}/><small>counted crossings</small></section>)}</div>
+    {history.length>0?<section className="panel" aria-label="Saved analyses"><div className="panel-title"><div><span className="section-number">HISTORY</span><h2>Saved analyses</h2></div><span className="tag">AUTOMATIC LOCAL SAVE</span></div><div className="button-row" style={{flexWrap:"wrap",justifyContent:"flex-start"}}>{history.slice(0,6).map(saved=><button key={saved.id} type="button" className="secondary" aria-pressed={job?.id===saved.id} onClick={()=>openSaved(saved)} title={saved.filename}>{saved.filename.length>28?saved.filename.slice(0,25)+"...":saved.filename} · {saved.status}</button>)}</div><p className="footnote">Analyses and available exports are stored in the local data folder, not uploaded to GitHub. Choose a saved job to reopen its results.</p></section>:null}
     <div className="workspace-grid"><section className="panel workspace" id="workspace"><div className="panel-title"><div><span className="section-number">01</span><h2>Video workspace</h2></div><span className="tag">{job?.status??"NO VIDEO"}</span></div>
       <div className="video-stage">
       {completed&&!showOriginal?<video key={job.id} src={`/api/jobs/${job.id}/artifacts/annotated.mp4`} controls playsInline aria-label="Annotated analysis video"/>:job?<div className="preview-canvas" style={{aspectRatio:`${job.width}/${job.height}`}}>
@@ -89,12 +109,13 @@ export default function Dashboard(){
       <div className="action-bar"><label><input type="checkbox" checked={trails} disabled={!canDraw} onChange={e=>setTrails(e.target.checked)}/> Movement trails</label>{active?<button className="secondary" onClick={()=>void cancel()}>Cancel analysis</button>:<button className="primary" disabled={!canDraw||points.length!==2||busy||!system?.model_ready} onClick={()=>void start()}>Start analysis <span>Ã¢â€ â€”</span></button>}</div>
       {job?<div className="progress-area" role="status"><div><span>{active?(job.phase==="FINALIZING"?"Finalizing annotated MP4":job.phase==="INITIALIZING"?"Loading detection model":"Analyzing and encoding every frame"):job.status}</span><span>{job.processed_frames} / {job.total_frames} frames Ã‚Â· {(job.progress*100).toFixed(0)}%</span></div><progress max="1" value={job.progress}/>{active&&job.exported_frames!==undefined?<small>{job.exported_frames} frames encoded | {(job.mode??"standard").toUpperCase()} mode</small>:null}</div>:null}
       {job?.status==="FAILED"&&result?<p className="notice">Analysis was retained. <a href={`/api/jobs/${job.id}/artifacts/events.csv`} download>Download CSV</a> or <a href={`/api/jobs/${job.id}/artifacts/analysis.json`} download>analysis JSON</a>. Annotated video export did not complete.</p>:null}
-      {error||job?.error?<p className="error" role="alert">{error||job?.error}</p>:null}
+      {error?<p className="error" role="alert">{error}</p>:null}
+      {job?.error?<p className={job.status==="COMPLETED"?"notice":"error"} role="status">{job.error}</p>:null}
       {system&&!system.model_ready?<p className="notice">Model not prepared. Run <code>python scripts/prepare_model.py</code> in the project environment, then reload.</p>:null}
     </section>
     <div className="side-panels"><section className="panel"><div className="panel-title"><div><span className="section-number">02</span><h2>Directional flow</h2></div><span className="muted">Ã¢â€¡â€ž</span></div><div className="direction"><span className="direction-icon">Ã¢â€ â€”</span><div><strong>A Ã¢â€ â€™ B</strong><small>Negative to positive line side</small></div><b>{result?.directions.A_TO_B??"\u2014"}</b></div><div className="direction"><span className="direction-icon reverse">Ã¢â€ â„¢</span><div><strong>B Ã¢â€ â€™ A</strong><small>Positive to negative line side</small></div><b>{result?.directions.B_TO_A??"\u2014"}</b></div><p className="footnote">Directions follow the order of your line endpoints. Track IDs are temporary within this video.</p></section>
     <section className="panel"><div className="panel-title"><div><span className="section-number">03</span><h2>Analysis details</h2></div></div><dl className="details"><div><dt>Execution provider</dt><dd>{(result?.provider??job?.provider)?.replace("ExecutionProvider","")??"Awaiting analysis"}</dd></div><div><dt>Input resolution</dt><dd>{job?`${job.width} Ãƒâ€” ${job.height}`:"\u2014"}</dd></div><div><dt>Input frame rate</dt><dd>{metric(job?.fps," FPS")}</dd></div><div><dt>Pipeline throughput</dt><dd className="accent">{metric(result?.metrics.processing_fps," FPS")}</dd></div><div><dt>Model-only throughput</dt><dd>{metric(result?.metrics.model_only_fps," FPS")}</dd></div><div><dt>Inference avg / p95</dt><dd>{result?`${result.metrics.inference_average_ms.toFixed(1)} / ${result.metrics.inference_p95_ms.toFixed(1)} ms`:"\u2014"}</dd></div><div><dt>Total elapsed</dt><dd>{metric(result?.metrics.elapsed_seconds," s")}</dd></div><div><dt>Peak worker RAM</dt><dd>{result?`${(result.metrics.peak_ram_bytes/1024**2).toFixed(0)} MB`:"\u2014"}</dd></div></dl></section></div></div>
     <Charts result={result}/>
-    <section className="panel exports" id="exports"><div><div className="eyebrow">TAKE YOUR INSIGHTS WITH YOU</div><h2>Ready for the next step.</h2><p className="muted">Download the annotated footage and the events behind every count.</p></div><div className="export-links">{[["annotated.mp4","Annotated MP4"],["events.csv","Events CSV"],["summary.json","Summary JSON"]].map(([file,label])=>completed?<a key={file} className="secondary" href={`/api/jobs/${job.id}/artifacts/${file}`} download>{label} Ã¢â€ â€œ</a>:<button key={file} className="secondary" disabled>{label} Ã¢â€ â€œ</button>)}</div></section>
+    <section className="panel exports" id="exports"><div><div className="eyebrow">TAKE YOUR INSIGHTS WITH YOU</div><h2>Ready for the next step.</h2><p className="muted">{completed?"Automatically saved locally. Download the annotated footage, event CSV and summary JSON anytime.":"Completed results are saved automatically in your local data folder."}</p></div><div className="export-links">{[["annotated.mp4","Annotated MP4"],["events.csv","Events CSV"],["summary.json","Summary JSON"]].map(([file,label])=>completed?<a key={file} className="secondary" href={`/api/jobs/${job.id}/artifacts/${file}`} download>{label} Ã¢â€ â€œ</a>:<button key={file} className="secondary" disabled>{label} Ã¢â€ â€œ</button>)}</div></section>
     <footer><span>ROADPULSE AI <span className="muted">/ Local-first traffic intelligence</span></span><span className="muted">YOLOX + ByteTrack Ã‚Â· No cloud inference</span></footer></main></div></div>;
 }
