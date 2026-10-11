@@ -57,7 +57,7 @@ def test_packaging_existing_demo(tmp_path, monkeypatch):
     out = tmp_path / "docs/showcase"
     assert (out / "roadpulse-demo.mp4").read_bytes() == original
     assert json.loads((out / "sample-summary.json").read_text())["total_crossings"] == 1
-    assert "Faruk Yıldız" in (out / "MEDIA_PROVENANCE.md").read_text()
+    assert "Faruk Yıldız" in (out / "MEDIA_PROVENANCE.md").read_text(encoding="utf-8")
     assert "track_id" in (out / "sample-events.csv").read_text()
     assert (out / "poster.jpg").exists()
 
