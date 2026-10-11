@@ -1,0 +1,8 @@
+event,earliest_video_seconds,latest_video_seconds,category,direction,description
+1,2.0,2.5,car,A_TO_B,gray sedan
+2,4.5,5.0,car,A_TO_B,dark SUV
+3,8.0,8.5,car,A_TO_B,red crossover
+4,11.0,11.5,car,A_TO_B,gray car
+5,13.0,13.5,car,A_TO_B,white SUV
+6,16.0,16.5,car,A_TO_B,dark SUV
+7,18.5,19.0,car,A_TO_B,dark car
