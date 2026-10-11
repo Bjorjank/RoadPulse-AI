@@ -2,6 +2,26 @@
 
 Local traffic intelligence: MP4 -> YOLOX-Tiny ONNX -> Roboflow ByteTrack -> finite-line crossings -> dashboard and exports.
 
+## Portfolio status and local result saving
+
+RoadPulse AI is a **local-first** computer-vision demonstration, not a cloud service.
+Its saved analysis jobs live in `data/roadpulse.sqlite3`; each job's input, annotated MP4
+(if export succeeds), `events.csv`, `analysis.json` and `summary.json` are kept
+under `data/<job-id>/`. The dashboard lists recent jobs so completed analyses can be
+reopened after restarting the browser or application. The local data folder is intentionally
+excluded from Git.
+
+**Video playback:** Completed MP4 files are served inline to the dashboard and can also
+be downloaded using the **Annotated MP4** link. If export finalization fails, the genuine
+CSV/analysis JSON remain available under the failed job; the MP4 is not falsely presented
+as complete. Inspect `data/<job-id>/encode.log` and free disk space, then check FFmpeg
+errors before retrying on a stable machine. Real-video export and browser saving must be
+verified locally; passing unit tests alone does not prove they work on every machine.
+
+**Public demo:** No sample video is committed yet. Only add a genuine annotated video
+after verifying source rights, correspondence with its CSV/JSON evidence, playback and
+privacy considerations. See [licenses and security](docs/LICENSES_SECURITY.md).
+
 ## Current local handoff
 
 Implementation and authentic Windows validation are recorded in [DELIVERY.md](docs/DELIVERY.md). The backend now supports **Standard** and **Fast** execution; the dashboard source includes the selector. An earlier production frontend build is preserved and does not yet include this selector. Its latest rebuild has deliberately not run on the stressed laptop. The interrupted installer replay also means dependency integrity has not been fully revalidated.
@@ -94,4 +114,4 @@ Peak RAM is sampled worker RSS and excludes the separate FFmpeg encoder. Pipelin
 
 ## Publication
 
-A local Git repository is prepared only for this project. No remote repository is created or pushed automatically. Exclude `data/`, `models/`, `artifacts/`, environments, personal files, and credentials when publishing. No private footage belongs in a public repository. Consult the media attribution file and review any public demo for visible people or plates.
+The GitHub repository hosts the source and documentation. Releases and public sample media require a separate review. Exclude `data/`, `models/`, `artifacts/`, environments, personal files, and credentials when publishing. No private footage belongs in a public repository. Consult the media attribution file and review any public demo for visible people or plates.
