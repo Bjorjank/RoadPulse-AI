@@ -4,7 +4,9 @@ Local traffic intelligence: MP4 -> YOLOX-Tiny ONNX -> Roboflow ByteTrack -> fini
 
 ## Recorded traffic demonstration
 
-[![Watch the authentic RoadPulse AI traffic demonstration](docs/showcase/poster.jpg)](docs/showcase/roadpulse-demo.mp4)
+[![RoadPulse AI real traffic analysis — animated preview; click to watch MP4](docs/showcase/roadpulse-preview.gif)](docs/showcase/roadpulse-demo.mp4)
+
+**Real recorded output.** Animated preview above; [watch the full annotated MP4](docs/showcase/roadpulse-demo.mp4).
 
 **Source footage:** [Busy Urban Highway with Flowing Traffic — Faruk Yıldız / Pexels](https://www.pexels.com/video/busy-urban-highway-with-flowing-traffic-29607724/). Licensed for use and modification under the [Pexels License](https://www.pexels.com/license/). RoadPulse AI is not endorsed by Pexels or the filmmaker.
 
