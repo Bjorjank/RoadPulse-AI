@@ -192,6 +192,10 @@ def create_app(root=DATA, enable_worker=True):
         finally:
             await file.close()
 
+    @app.get("/api/jobs", response_model=list[Job])
+    def history():
+        return store.recent(limit=12)
+
     @app.get("/api/jobs/{job_id}", response_model=Job)
     def status(job_id: str):
         return get_job(job_id)
@@ -248,8 +252,8 @@ def create_app(root=DATA, enable_worker=True):
     @app.get("/api/jobs/{job_id}/results", response_model=Results)
     def results(job_id: str):
         job = get_job(job_id)
-        if job["status"] != "COMPLETED":
-            raise HTTPException(409, "Results are available after completion")
+        if job["status"] not in {"COMPLETED", "FAILED"} or job.get("results") is None:
+            raise HTTPException(409, "Results are available after analysis")
         return job["results"]
 
     @app.get("/api/jobs/{job_id}/preview")
@@ -266,9 +270,13 @@ def create_app(root=DATA, enable_worker=True):
         path = store.root / job_id / artifact_name
         if not path.is_file():
             raise HTTPException(404, "Artifact unavailable")
-        if not path.is_file():
-            raise HTTPException(404, "Artifact missing")
-        return FileResponse(path, media_type=ARTIFACTS[artifact_name], filename=artifact_name)
+        return FileResponse(
+            path,
+            media_type=ARTIFACTS[artifact_name],
+            filename=artifact_name,
+            content_disposition_type="inline" if artifact_name == "annotated.mp4" else "attachment",
+            headers={"Cache-Control": "private, no-store"},
+        )
 
     return app
 
