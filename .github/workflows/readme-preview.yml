@@ -24,7 +24,11 @@ jobs:
         run: |
           set -euo pipefail
           test -s docs/showcase/roadpulse-demo.mp4
-          command -v ffmpeg
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq ffmpeg
+          fi
+          ffmpeg -version | head -n 1
           ffmpeg -hide_banner -loglevel error -nostdin -y -threads 1 \
             -ss 2 -t 8 -i docs/showcase/roadpulse-demo.mp4 \
             -filter_complex "[0:v]fps=6,scale=640:-2:flags=lanczos,split[gif][pal];[pal]palettegen=max_colors=96:stats_mode=diff[p];[gif][p]paletteuse=dither=bayer:bayer_scale=3" \
@@ -47,7 +51,7 @@ jobs:
           elif animated not in text:
               raise SystemExit("README target not found; refusing silent edit")
           anchor = animated + "\n\n"
-          caption = "**Real recorded output.** Animated preview above; [watch the full annotated MP4](docs/showcase/roadpulse-demo.mp4) or [open the dedicated video player](docs/index.html).\n\n"
+          caption = "**Real recorded output.** Animated preview above; [watch the full annotated MP4](docs/showcase/roadpulse-demo.mp4).\n\n"
           if anchor in text and caption not in text:
               text = text.replace(anchor, anchor + caption, 1)
           page.write_text(text, encoding="utf-8")
