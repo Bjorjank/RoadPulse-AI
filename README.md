@@ -2,6 +2,24 @@
 
 Local traffic intelligence: MP4 -> YOLOX-Tiny ONNX -> Roboflow ByteTrack -> finite-line crossings -> dashboard and exports.
 
+## Recorded traffic demonstration
+
+**Source footage:** [Busy Urban Highway with Flowing Traffic — Faruk Yıldız / Pexels](https://www.pexels.com/video/busy-urban-highway-with-flowing-traffic-29607724/). Licensed for use and modification under the [Pexels License](https://www.pexels.com/license/). RoadPulse AI is not endorsed by Pexels or the filmmaker.
+
+The source video was analyzed locally as `demo.mp4`. To publish its **actual** annotated result and matching crossings, run the lightweight packaging command below in the existing virtual environment. It reads the newest matching job from SQLite, checks video/CSV/JSON consistency, and prepares a real MP4, one-frame poster, and sanitized summary. It does **not** rerun detection or tracking.
+
+```powershell
+.\.venv\Scripts\python.exe scripts/prepare_showcase.py
+# Only if the existing output is too large, explicitly opt into low-thread video transcoding:
+# .\.venv\Scripts\python.exe scripts/prepare_showcase.py --compress
+```
+
+After successful preparation and visual review, commit **only** the files under `docs/showcase/`. The [static demonstration page](docs/index.html) is prepared for GitHub Pages deployment from the `docs/` folder; it cannot play the video until the verified MP4 has actually been committed.
+
+**When demo assets are committed:** [annotated MP4](docs/showcase/roadpulse-demo.mp4) · [events CSV](docs/showcase/sample-events.csv) · [results JSON](docs/showcase/sample-summary.json) · [media provenance](docs/showcase/MEDIA_PROVENANCE.md).
+
+Do not commit `data/`, original video inputs, model files, private material, or credentials. Do not claim demonstration counts are independent ground-truth validation.
+
 ## Portfolio status and local result saving
 
 RoadPulse AI is a **local-first** computer-vision demonstration, not a cloud service.
@@ -18,9 +36,7 @@ as complete. Inspect `data/<job-id>/encode.log` and free disk space, then check 
 errors before retrying on a stable machine. Real-video export and browser saving must be
 verified locally; passing unit tests alone does not prove they work on every machine.
 
-**Public demo:** No sample video is committed yet. Only add a genuine annotated video
-after verifying source rights, correspondence with its CSV/JSON evidence, playback and
-privacy considerations. See [licenses and security](docs/LICENSES_SECURITY.md).
+**Publication gate:** No source traffic video or raw runtime data is committed. Verify video playback, correspondence with CSV/JSON, license and privacy before making the repository public. See [licenses and security](docs/LICENSES_SECURITY.md).
 
 ## Current local handoff
 
