@@ -48,6 +48,15 @@ class Store:
         with self.connect() as db:
             return [json.loads(row[0]) for row in db.execute("SELECT payload FROM jobs")]
 
+    def recent(self, limit=12):
+        """Newest saved jobs, including jobs from earlier application sessions."""
+        limit = max(1, min(int(limit), 50))
+        with self.connect() as db:
+            rows = db.execute(
+                "SELECT payload FROM jobs ORDER BY rowid DESC LIMIT ?", (limit,)
+            ).fetchall()
+        return [json.loads(row[0]) for row in rows]
+
     def update(self, job_id, **changes):
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
