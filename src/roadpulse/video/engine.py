@@ -1,7 +1,6 @@
 import csv
 import json
 import platform
-import subprocess
 import time
 from collections import Counter, defaultdict, deque
 from pathlib import Path
@@ -13,47 +12,78 @@ import psutil
 from trackers import ByteTrackTracker
 
 from roadpulse.analytics.crossing import LineCounter
-from roadpulse.budget import rest_after
 from roadpulse.detection.yolox import CLASSES, Detector
 from roadpulse.jobs.schemas import Results
 from roadpulse.jobs.store import Store
+from roadpulse.profiles import execution_profile
 from roadpulse.video.completeness import decode_warning
+from roadpulse.video.export import ExportCancelled, StreamingExporter
 
-
-class Cancelled(Exception):
-    pass
+Cancelled = ExportCancelled
 
 
 def process_job(root, job_id):
     cv2.setNumThreads(1)
     store = Store(root)
     cap, writer = None, None
+    result = None
     folder = Path(root) / job_id
     try:
         job = store.get(job_id)
         if job["status"] == "CANCELLED":
             return
-        store.update(job_id, status="RUNNING")
+        profile = execution_profile(job.get("mode", "standard"))
+        store.update(job_id, status="RUNNING", phase="INITIALIZING")
         start = time.perf_counter()
-        detector = Detector()
+        detector = Detector(threads=profile.inference_threads)
         store.update(job_id, provider=detector.provider)
         tracker = ByteTrackTracker(
             frame_rate=job["fps"], track_activation_threshold=0.3, high_conf_det_threshold=0.3
         )
         counter = LineCounter(job["line"], job["width"], job["height"])
-        cap = cv2.VideoCapture(
-            str(folder / "input.mp4"), cv2.CAP_FFMPEG, [cv2.CAP_PROP_N_THREADS, 1]
-        )
+        cap = cv2.VideoCapture(str(folder / "input.mp4"), cv2.CAP_FFMPEG, [cv2.CAP_PROP_N_THREADS, 1])
         if not cap.isOpened():
             raise ValueError("Cannot reopen uploaded video")
-        writer = cv2.VideoWriter(
-            str(folder / "intermediate.mp4"),
-            cv2.VideoWriter_fourcc(*"mp4v"),
+        writer = StreamingExporter(
+            imageio_ffmpeg.get_ffmpeg_exe(),
+            folder,
+            job["width"],
+            job["height"],
             job["fps"],
-            (job["width"], job["height"]),
+            pending_frames=profile.pending_frames,
         )
-        if not writer.isOpened():
-            raise RuntimeError("MP4 encoder unavailable")
+        store.update(job_id, phase="ANALYZING")
+        last_cancel_check, last_progress = 0.0, 0.0
+        is_cancelled = False
+        process = psutil.Process()
+
+        def cancelled():
+            nonlocal last_cancel_check, is_cancelled
+            now = time.perf_counter()
+            if now - last_cancel_check >= 0.25:
+                is_cancelled = store.get(job_id)["status"] == "CANCELLED"
+                last_cancel_check = now
+            return is_cancelled
+
+        def publish_progress(force=False, phase="ANALYZING"):
+            nonlocal last_progress, peak
+            now = time.perf_counter()
+            if not force and now - last_progress < 0.5:
+                return
+            if cancelled():
+                raise Cancelled()
+            exported = writer.encoded_frames()
+            denominator = max(job["total_frames"], frames, 1)
+            peak = max(peak, process.memory_info().rss)
+            store.update(
+                job_id,
+                processed_frames=frames,
+                exported_frames=exported,
+                phase=phase,
+                progress=min(0.99, 0.90 * frames / denominator + 0.09 * exported / denominator),
+            )
+            last_progress = now
+
         latencies, volume, trails = [], Counter(), defaultdict(lambda: deque(maxlen=30))
         peak, write_time, processing_time, observations, frames = 0, 0.0, 0.0, 0, 0
         with (folder / "events.csv").open("w", newline="", encoding="utf-8") as output:
@@ -62,7 +92,7 @@ def process_job(root, job_id):
             )
             csv_writer.writeheader()
             while True:
-                if frames % 10 == 0 and store.get(job_id)["status"] == "CANCELLED":
+                if cancelled():
                     raise Cancelled()
                 frame_start = time.perf_counter()
                 ok, frame = cap.read()
@@ -113,75 +143,28 @@ def process_job(root, job_id):
                 )
                 processing_time += time.perf_counter() - frame_start
                 write_start = time.perf_counter()
-                writer.write(frame)
+                writer.write(frame.tobytes(), cancelled)
                 write_time += time.perf_counter() - write_start
                 frames += 1
-                peak = max(peak, psutil.Process().memory_info().rss)
+                publish_progress()
                 if frames % 10 == 0:
-                    store.update(
-                        job_id,
-                        processed_frames=frames,
-                        progress=min(0.98, frames / max(job["total_frames"], frames)),
-                    )
                     output.flush()
-                if not rest_after(
-                    time.perf_counter() - frame_start,
-                    lambda: store.get(job_id)["status"] == "CANCELLED",
-                ):
-                    raise Cancelled()
         cap.release()
-        writer.release()
-        cap, writer = None, None
+        cap = None
         warning = decode_warning(frames, job["total_frames"])
         if store.get(job_id)["status"] == "CANCELLED":
             raise Cancelled()
-        encode_start = time.perf_counter()
-        command = [
-            imageio_ffmpeg.get_ffmpeg_exe(),
-            "-y",
-            "-threads",
-            "1",
-            "-filter_threads",
-            "1",
-            "-readrate",
-            str(min(1.0, 2.0 / job["fps"])),
-            "-i",
-            str(folder / "intermediate.mp4"),
-            "-an",
-            "-c:v",
-            "libx264",
-            "-threads",
-            "1",
-            "-preset",
-            "ultrafast",
-            "-pix_fmt",
-            "yuv420p",
-            "-vf",
-            "pad=ceil(iw/2)*2:ceil(ih/2)*2",
-            "-movflags",
-            "+faststart",
-            str(folder / "annotated.mp4"),
-        ]
-        with (folder / "encode.log").open("wb") as log:
-            proc = subprocess.Popen(command, stdout=log, stderr=log)
-            while proc.poll() is None:
-                if store.get(job_id)["status"] == "CANCELLED":
-                    proc.terminate()
-                    proc.wait()
-                    raise Cancelled()
-                time.sleep(0.1)
-            if proc.returncode:
-                raise RuntimeError("H.264 export failed; inspect this job's encode.log")
-        write_time += time.perf_counter() - encode_start
-        (folder / "intermediate.mp4").unlink(missing_ok=True)
         elapsed = time.perf_counter() - start
         result = {
             "job_id": job_id,
             "model": "YOLOX-Tiny",
+            "mode": profile.name,
+            "inference_threads": profile.inference_threads,
             "provider": detector.provider,
             "provider_warnings": detector.failures,
             "frames_processed": frames,
             "reported_frames": job["total_frames"],
+            "export_complete": False,
             "decode_warnings": [warning] if warning else [],
             "tracked_observations": observations,
             "total": sum(counter.counts.values()),
@@ -207,26 +190,46 @@ def process_job(root, job_id):
             },
         }
         Results.model_validate(result)
+        # Retain genuine analytics before finalizing the encoder. An export failure
+        # must not discard counts that were already computed successfully.
+        (folder / "analysis.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+        store.update(job_id, results=result, phase="FINALIZING", error=warning)
+        publish_progress(force=True, phase="FINALIZING")
+        finalize_start = time.perf_counter()
+        writer.finish(cancelled, lambda: publish_progress(phase="FINALIZING"))
+        writer = None
+        result["export_complete"] = True
+        result["metrics"]["output_writing_seconds"] += time.perf_counter() - finalize_start
+        result["metrics"]["elapsed_seconds"] = time.perf_counter() - start
+        result["metrics"]["processing_fps"] = frames / result["metrics"]["elapsed_seconds"]
+        Results.model_validate(result)
         (folder / "summary.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
         if store.get(job_id)["status"] == "CANCELLED":
             raise Cancelled()
-        # The existing built dashboard renders job.error, including this explicit
-        # partial-result warning; no frontend rebuild is needed to make it visible.
         store.update(
-            job_id, status="COMPLETED", results=result, processed_frames=frames,
-            progress=1.0, error=warning,
+            job_id,
+            status="COMPLETED",
+            phase="COMPLETED",
+            results=result,
+            processed_frames=frames,
+            exported_frames=frames,
+            progress=1.0,
+            error=warning,
         )
     except Cancelled:
         if store.get(job_id)["status"] != "CANCELLED":
-            store.update(job_id, status="CANCELLED")
+            store.update(job_id, status="CANCELLED", phase="CANCELLED")
     except Exception as exc:
         if store.get(job_id)["status"] not in {"CANCELLED", "COMPLETED"}:
-            store.update(job_id, status="FAILED", error=str(exc))
+            message = str(exc)
+            if result is not None:
+                message += ". Analysis is retained; CSV and analysis JSON are available."
+            store.update(job_id, status="FAILED", phase="FAILED", error=message, results=result)
     finally:
         if cap is not None:
             cap.release()
         if writer is not None:
-            writer.release()
+            writer.abort()
         if store.get(job_id)["status"] != "COMPLETED":
-            for name in ("annotated.mp4", "intermediate.mp4", "events.csv", "summary.json"):
+            for name in ("annotated.mp4", "annotated.partial.mp4", "intermediate.mp4", "summary.json"):
                 (folder / name).unlink(missing_ok=True)

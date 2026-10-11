@@ -16,6 +16,7 @@ from roadpulse.video.engine import process_job
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("video", type=Path)
+    parser.add_argument("--mode", choices=["standard", "fast"], default="standard")
     parser.add_argument(
         "--line", nargs=4, type=float, default=[0.1, 0.5, 0.9, 0.5], metavar=("X1", "Y1", "X2", "Y2")
     )
@@ -24,7 +25,7 @@ def main():
     from roadpulse.jobs.schemas import StartRequest
 
     config = StartRequest(
-        line=[{"x": args.line[0], "y": args.line[1]}, {"x": args.line[2], "y": args.line[3]}]
+        line=[{"x": args.line[0], "y": args.line[1]}, {"x": args.line[2], "y": args.line[3]}], mode=args.mode
     )
     root = ROOT / "artifacts/benchmark-jobs"
     store = Store(root)
@@ -56,7 +57,9 @@ def main():
     finally:
         cap.release()
     store.create(job)
-    store.update(job_id, status="QUEUED", line=[[p.x, p.y] for p in config.line], trails=True)
+    store.update(
+        job_id, status="QUEUED", line=[[p.x, p.y] for p in config.line], trails=True, mode=config.mode
+    )
     process_job(root, job_id)
     job = store.get(job_id)
     if job["status"] != "COMPLETED":

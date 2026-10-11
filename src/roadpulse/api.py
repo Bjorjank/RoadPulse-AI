@@ -1,5 +1,6 @@
 import asyncio
 import multiprocessing
+import os
 import re
 import shutil
 import threading
@@ -17,6 +18,7 @@ from fastapi.responses import FileResponse
 from roadpulse.config import DATA, MAX_UPLOAD, MODEL
 from roadpulse.jobs.schemas import Health, Job, Results, StartRequest, System
 from roadpulse.jobs.store import Store
+from roadpulse.profiles import execution_profile
 from roadpulse.video.engine import process_job
 
 
@@ -55,10 +57,17 @@ class UploadLimitMiddleware:
         await self.app(scope, limited_receive, send)
 
 
-ARTIFACTS = {"annotated.mp4": "video/mp4", "events.csv": "text/csv", "summary.json": "application/json"}
+ARTIFACTS = {
+    "annotated.mp4": "video/mp4",
+    "events.csv": "text/csv",
+    "summary.json": "application/json",
+    "analysis.json": "application/json",
+}
 
 
 def create_app(root=DATA, enable_worker=True):
+    default_mode = os.getenv("ROADPULSE_DEFAULT_MODE", "standard")
+    execution_profile(default_mode)  # Reject invalid launcher/environment configuration.
     store = Store(root)
     lock = threading.Lock()
 
@@ -121,6 +130,7 @@ def create_app(root=DATA, enable_worker=True):
             model_ready=MODEL.exists() and MODEL.with_suffix(".json").exists(),
             available_providers=ort.get_available_providers(),
             profile="Balanced / 416 x 416",
+            default_mode=default_mode,
         )
 
     @app.post("/api/jobs", response_model=Job, status_code=201)
@@ -165,7 +175,14 @@ def create_app(root=DATA, enable_worker=True):
             except Exception as exc:
                 raise HTTPException(400, str(exc)) from exc
             job = Job(
-                id=job_id, filename=filename, status="CREATED", width=w, height=h, fps=fps, total_frames=count
+                id=job_id,
+                filename=filename,
+                status="CREATED",
+                width=w,
+                height=h,
+                fps=fps,
+                total_frames=count,
+                mode=default_mode,
             )
             store.create(job.model_dump(mode="json"))
             return job
@@ -192,7 +209,12 @@ def create_app(root=DATA, enable_worker=True):
             if app.state.pool is None:
                 raise HTTPException(503, "Worker is disabled")
             updated = store.update(
-                job_id, status="QUEUED", line=[[p.x, p.y] for p in config.line], trails=config.trails
+                job_id,
+                status="QUEUED",
+                line=[[p.x, p.y] for p in config.line],
+                trails=config.trails,
+                mode=config.mode if "mode" in config.model_fields_set else default_mode,
+                phase="QUEUED",
             )
             try:
                 future = app.state.pool.submit(process_job, str(store.root), job_id)
@@ -217,7 +239,7 @@ def create_app(root=DATA, enable_worker=True):
             job = get_job(job_id)
             if job["status"] in {"CREATED", "QUEUED", "RUNNING"}:
                 try:
-                    job = store.update(job_id, status="CANCELLED")
+                    job = store.update(job_id, status="CANCELLED", phase="CANCELLED")
                 except ValueError:
                     # A worker may have reached a terminal state after the read.
                     job = get_job(job_id)
@@ -238,9 +260,12 @@ def create_app(root=DATA, enable_worker=True):
     @app.get("/api/jobs/{job_id}/artifacts/{artifact_name}")
     def artifact(job_id: str, artifact_name: str):
         job = get_job(job_id)
-        if job["status"] != "COMPLETED" or artifact_name not in ARTIFACTS:
+        retained_analysis = job["status"] == "FAILED" and artifact_name in {"events.csv", "analysis.json"}
+        if artifact_name not in ARTIFACTS or (job["status"] != "COMPLETED" and not retained_analysis):
             raise HTTPException(404, "Artifact unavailable")
         path = store.root / job_id / artifact_name
+        if not path.is_file():
+            raise HTTPException(404, "Artifact unavailable")
         if not path.is_file():
             raise HTTPException(404, "Artifact missing")
         return FileResponse(path, media_type=ARTIFACTS[artifact_name], filename=artifact_name)

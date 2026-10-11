@@ -1,4 +1,5 @@
 """Small regression checks without loading OpenCV or the inference runtime."""
+
 import importlib.util
 import unittest
 from pathlib import Path

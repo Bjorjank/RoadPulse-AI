@@ -2,6 +2,7 @@ import hashlib
 import json
 import time
 import warnings
+from functools import lru_cache
 
 import cv2
 import numpy as np
@@ -24,14 +25,19 @@ def preprocess(frame, size):
     return np.ascontiguousarray(canvas.transpose(2, 0, 1)[None], dtype=np.float32), scale
 
 
-def decode(raw, size):
-    values = raw[0].copy()
+@lru_cache(maxsize=4)
+def decoding_grid(size):
     grids, strides = [], []
     for stride in (8, 16, 32):
         y, x = np.mgrid[: size[0] // stride, : size[1] // stride]
         grids.append(np.stack((x, y), axis=-1).reshape(-1, 2))
         strides.append(np.full((x.size, 1), stride))
-    grid, stride = np.concatenate(grids), np.concatenate(strides)
+    return np.concatenate(grids), np.concatenate(strides)
+
+
+def decode(raw, size):
+    values = raw[0].copy()
+    grid, stride = decoding_grid(tuple(size))
     if values.shape != (len(grid), 85):
         raise ValueError(f"Unexpected YOLOX tensor {values.shape}; expected {(len(grid), 85)}")
     values[:, :2] = (values[:, :2] + grid) * stride
@@ -72,7 +78,7 @@ def postprocess(raw, size, ratio, frame_shape, threshold=0.1):
 
 
 class Detector:
-    def __init__(self, path=MODEL):
+    def __init__(self, path=MODEL, *, threads=1):
         start = time.perf_counter()
         path = type(MODEL)(path)
         if not path.exists():
@@ -81,8 +87,11 @@ class Detector:
         if hashlib.sha256(path.read_bytes()).hexdigest() != manifest["sha256"]:
             raise ValueError("Model checksum mismatch; prepare model again")
         options = ort.SessionOptions()
-        options.intra_op_num_threads = 1
+        options.intra_op_num_threads = max(1, min(2, threads))
         options.inter_op_num_threads = 1
+        options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+        options.add_session_config_entry("session.intra_op.allow_spinning", "0")
+        options.add_session_config_entry("session.inter_op.allow_spinning", "0")
         options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
         self.failures = []
         available = ort.get_available_providers()
@@ -108,6 +117,7 @@ class Detector:
                 shape = session.get_inputs()[0].shape
                 self.size = (int(shape[2]), int(shape[3]))
                 session.run(None, {session.get_inputs()[0].name: np.zeros((1, 3, *self.size), np.float32)})
+                self.input_name = session.get_inputs()[0].name
                 self.session = session
                 self.provider = session.get_providers()[0]
                 break
@@ -121,6 +131,6 @@ class Detector:
     def infer(self, frame):
         tensor, ratio = preprocess(frame, self.size)
         start = time.perf_counter()
-        raw = self.session.run(None, {self.session.get_inputs()[0].name: tensor})[0]
+        raw = self.session.run(None, {self.input_name: tensor})[0]
         latency = time.perf_counter() - start
         return postprocess(raw, self.size, ratio, frame.shape), latency

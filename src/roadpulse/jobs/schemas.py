@@ -21,6 +21,7 @@ class Point(BaseModel):
 class StartRequest(BaseModel):
     line: tuple[Point, Point]
     trails: bool = True
+    mode: Literal["standard", "fast"] = "standard"
 
     @model_validator(mode="after")
     def distinct(self):
@@ -39,6 +40,8 @@ class System(BaseModel):
     available_providers: list[str]
     profile: str
     worker_limit: int = 1
+    default_mode: Literal["standard", "fast"] = "standard"
+    execution_modes: list[str] = Field(default_factory=lambda: ["standard", "fast"])
 
 
 class Metrics(BaseModel):
@@ -63,7 +66,10 @@ class Results(BaseModel):
     provider: str
     provider_warnings: list[str]
     frames_processed: int
+    mode: Literal["standard", "fast"] = "standard"
+    inference_threads: int = 1
     reported_frames: int | None = None
+    export_complete: bool = False
     decode_warnings: list[str] = Field(default_factory=list)
     tracked_observations: int
     total: int
@@ -82,6 +88,9 @@ class Job(BaseModel):
     fps: float
     total_frames: int
     provider: str | None = None
+    mode: Literal["standard", "fast"] = "standard"
+    phase: str = "READY"
+    exported_frames: int = 0
     processed_frames: int = 0
     progress: float = 0
     error: str | None = None

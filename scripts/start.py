@@ -12,6 +12,12 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dev", action="store_true", help="Use Next development mode instead of production")
+    parser.add_argument(
+        "--mode",
+        choices=["standard", "fast"],
+        default="standard",
+        help="Default execution mode, including for older frontend builds",
+    )
     args = parser.parse_args()
     python = ROOT / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     node = shutil.which("node")
@@ -26,11 +32,17 @@ def main():
             if sock.connect_ex(("127.0.0.1", port)) == 0:
                 raise SystemExit(f"Port {port} is already in use; close that service or reuse it")
     environment = {**os.environ, "NEXT_TELEMETRY_DISABLED": "1", "PYTHONUNBUFFERED": "1"}
-    environment.update({
-        "OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1", "MKL_NUM_THREADS": "1",
-        "NUMEXPR_NUM_THREADS": "1", "UV_THREADPOOL_SIZE": "1",
-        "NODE_OPTIONS": "--max-old-space-size=512",
-    })
+    environment.update(
+        {
+            "OMP_NUM_THREADS": "1",
+            "OPENBLAS_NUM_THREADS": "1",
+            "MKL_NUM_THREADS": "1",
+            "NUMEXPR_NUM_THREADS": "1",
+            "UV_THREADPOOL_SIZE": "1",
+            "NODE_OPTIONS": "--max-old-space-size=512",
+            "ROADPULSE_DEFAULT_MODE": args.mode,
+        }
+    )
     children = []
     try:
         children.append(
@@ -66,7 +78,10 @@ def main():
                 time.sleep(0.5)
         else:
             raise RuntimeError("Services did not become ready")
-        print("RoadPulse AI ready: http://127.0.0.1:3000 | Ctrl+C stops both services", flush=True)
+        print(
+            f"RoadPulse AI ready: http://127.0.0.1:3000 | default mode: {args.mode.upper()} | Ctrl+C stops both services",
+            flush=True,
+        )
         while all(p.poll() is None for p in children):
             time.sleep(0.5)
     except KeyboardInterrupt:
