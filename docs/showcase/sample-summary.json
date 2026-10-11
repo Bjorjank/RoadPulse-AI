@@ -1,0 +1,31 @@
+{
+  "application": "RoadPulse AI",
+  "footage": "https://www.pexels.com/video/busy-urban-highway-with-flowing-traffic-29607724/",
+  "model": "YOLOX-Tiny",
+  "provider": "CPUExecutionProvider",
+  "frames_processed": 700,
+  "reported_frames": 700,
+  "total_crossings": 7,
+  "counts": {
+    "car": 5,
+    "motorcycle": 0,
+    "bus": 0,
+    "truck": 2
+  },
+  "directions": {
+    "A_TO_B": 7,
+    "B_TO_A": 0
+  },
+  "volume": [
+    {
+      "seconds": 0,
+      "count": 4
+    },
+    {
+      "seconds": 10,
+      "count": 3
+    }
+  ],
+  "decode_warnings": [],
+  "presentation_note": "Byte-for-byte copy of the actual annotated MP4."
+}

@@ -1,0 +1,8 @@
+track_id,category,direction,frame,video_seconds
+10,truck,A_TO_B,102,2.04
+9,car,A_TO_B,251,5.02
+14,car,A_TO_B,344,6.88
+15,car,A_TO_B,420,8.4
+17,truck,A_TO_B,568,11.36
+12,car,A_TO_B,596,11.92
+18,car,A_TO_B,601,12.02

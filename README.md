@@ -4,6 +4,8 @@ Local traffic intelligence: MP4 -> YOLOX-Tiny ONNX -> Roboflow ByteTrack -> fini
 
 ## Recorded traffic demonstration
 
+[![Watch the authentic RoadPulse AI traffic demonstration](docs/showcase/poster.jpg)](docs/showcase/roadpulse-demo.mp4)
+
 **Source footage:** [Busy Urban Highway with Flowing Traffic — Faruk Yıldız / Pexels](https://www.pexels.com/video/busy-urban-highway-with-flowing-traffic-29607724/). Licensed for use and modification under the [Pexels License](https://www.pexels.com/license/). RoadPulse AI is not endorsed by Pexels or the filmmaker.
 
 The source video was analyzed locally as `demo.mp4`. To publish its **actual** annotated result and matching crossings, run the lightweight packaging command below in the existing virtual environment. It reads the newest matching job from SQLite, checks video/CSV/JSON consistency, and prepares a real MP4, one-frame poster, and sanitized summary. It does **not** rerun detection or tracking.
