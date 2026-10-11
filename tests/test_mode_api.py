@@ -103,6 +103,62 @@ class ModeApiTests(unittest.TestCase):
     def test_system_advertises_modes(self):
         self.assertEqual(self.client.get("/api/system").json()["execution_modes"], ["standard", "fast"])
 
+    def test_saved_history_and_inline_video_download(self):
+        from roadpulse.jobs.schemas import Job
+
+        older = self.job_id
+        newer = "b" * 32
+        self.store.create(
+            Job(
+                id=newer,
+                filename="newer.mp4",
+                status="CREATED",
+                width=64,
+                height=48,
+                fps=30,
+                total_frames=6,
+            ).model_dump(mode="json")
+        )
+        listed = self.client.get("/api/jobs")
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual([j["id"] for j in listed.json()[:2]], [newer, older])
+
+        folder = self.store.root / older
+        folder.mkdir()
+        payload = b"123456789"
+        (folder / "annotated.mp4").write_bytes(payload)
+        (folder / "events.csv").write_text("track_id,category\\n", encoding="utf-8")
+        self.store.update(older, status="QUEUED")
+        self.store.update(older, status="RUNNING")
+        self.store.update(older, status="COMPLETED")
+        video = self.client.get(f"/api/jobs/{older}/artifacts/annotated.mp4")
+        self.assertEqual(video.status_code, 200)
+        self.assertEqual(video.content, payload)
+        self.assertTrue(video.headers["content-disposition"].startswith("inline;"))
+        self.assertEqual(video.headers["cache-control"], "private, no-store")
+        csv_response = self.client.get(f"/api/jobs/{older}/artifacts/events.csv")
+        self.assertTrue(csv_response.headers["content-disposition"].startswith("attachment;"))
+
+    def test_failed_results_remain_available(self):
+        analysis = {
+            "job_id": self.job_id, "model": "YOLOX-Tiny", "provider": "fixture",
+            "provider_warnings": [], "frames_processed": 1, "tracked_observations": 1,
+            "total": 0, "counts": {"car": 0}, "directions": {"A_TO_B": 0},
+            "volume": [], "metrics": {
+                "initialization_seconds": 0, "inference_average_ms": 1,
+                "inference_median_ms": 1, "inference_p95_ms": 1,
+                "model_only_fps": 1, "processing_fps": 1, "elapsed_seconds": 1,
+                "frame_processing_seconds": 1, "output_writing_seconds": 0,
+                "peak_ram_bytes": 1024, "os": "fixture", "cpu": "fixture",
+            },
+        }
+        self.store.update(self.job_id, status="QUEUED")
+        self.store.update(self.job_id, status="FAILED", results=analysis)
+        response = self.client.get(f"/api/jobs/{self.job_id}/results")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["job_id"], self.job_id)
+        self.assertEqual(response.json()["export_complete"], False)
+
     def test_failed_job_retained_analysis_allowlist(self):
         folder = self.store.root / self.job_id
         folder.mkdir()
