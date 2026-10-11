@@ -158,6 +158,7 @@ def main():
     )
 
     poster = target / "poster.jpg"
+    poster.unlink(missing_ok=True)
     try:
         run_ffmpeg([
             "-ss", "00:00:01", "-i", str(final_mp4),
@@ -181,6 +182,18 @@ def main():
         "- Source identification is user-provided; independently check footage before publishing.\n"
     )
     (target / "MEDIA_PROVENANCE.md").write_text(provenance, encoding="utf-8")
+    readme_path = PROJECT / "README.md"
+    if poster.exists() and readme_path.is_file():
+        readme = readme_path.read_text(encoding="utf-8")
+        heading = "## Recorded traffic demonstration\n\n"
+        preview = (
+            "[![Watch the authentic RoadPulse AI traffic demonstration]"
+            "(docs/showcase/poster.jpg)](docs/showcase/roadpulse-demo.mp4)\n\n"
+        )
+        if heading in readme and preview not in readme:
+            readme_path.write_text(
+                readme.replace(heading, heading + preview, 1), encoding="utf-8"
+            )
     print("SHOWCASE_READY=YES")
     print("JOB_STATUS=" + job["status"])
     print("CROSSINGS=" + str(result["total"]))
