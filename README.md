@@ -14,7 +14,7 @@ The source video was analyzed locally as `demo.mp4`. To publish its **actual** a
 # .\.venv\Scripts\python.exe scripts/prepare_showcase.py --compress
 ```
 
-After successful preparation and visual review, commit **only** the files under `docs/showcase/`. The [static demonstration page](docs/index.html) is prepared for GitHub Pages deployment from the `docs/` folder; it cannot play the video until the verified MP4 has actually been committed.
+After successful preparation and visual review, commit **only** `docs/showcase/` and the automatically updated `README.md` (if a poster was generated). The [static demonstration page](docs/index.html) is prepared for GitHub Pages deployment from the `docs/` folder; it cannot play the video until the verified MP4 has actually been committed.
 
 **When demo assets are committed:** [annotated MP4](docs/showcase/roadpulse-demo.mp4) · [events CSV](docs/showcase/sample-events.csv) · [results JSON](docs/showcase/sample-summary.json) · [media provenance](docs/showcase/MEDIA_PROVENANCE.md).
 
