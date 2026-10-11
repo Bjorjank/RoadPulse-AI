@@ -66,3 +66,10 @@ Open http://127.0.0.1:3000. Nothing is analyzed until Start analysis is selected
 Validated environment: Python 3.11.2; Node 24.15.0; npm 11.12.1; ONNX Runtime 1.31.0; OpenCV 5.0.0.93; NumPy 2.4.6; trackers 2.6.1; supervision 0.30.9; FastAPI 0.143.0; Pydantic 2.14.0; Next 16.4.0; React 19.3.0. Exact dependency pins are in requirements.lock and apps/web/package-lock.json.
 
 Source is prepared in a local Git repository. Models, footage, exports, environments, node_modules, caches and credentials are excluded. No API keys or remote inference are required. Remote publication requires explicit user authorization. The optional sample is CC0; YOLOX is Apache-2.0; bundled FFmpeg/libx264 licensing and redistribution considerations are documented separately.
+
+
+## Small end-of-video discrepancy fix
+
+A real uploaded job failed after 462 decoded frames against 465 container-reported frames. The former strict check discarded exports before encoding. Container counts alone do not establish whether the tail is corrupt or the metadata is approximate. The fix accepts a discrepancy only when it is at most three frames AND at most 1% of the reported count, exports the actual decoded frames and shows an explicit partial-analysis warning in the existing dashboard. JSON now records reported_frames and decode_warnings. Larger gaps and empty videos still fail. Progress completion means the available-frame analysis/export finished, not that all reported frames were recovered.
+
+The old failed job retained only input.mp4 and preview.jpg; its results cannot be recovered without processing again. No input was modified, no job state was rewritten, and no automatic rerun/server restart was performed. Six standard-library regression cases and syntax validation are used for this change; full video validation is deferred to avoid laptop load.

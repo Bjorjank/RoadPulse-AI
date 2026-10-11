@@ -63,6 +63,8 @@ class Results(BaseModel):
     provider: str
     provider_warnings: list[str]
     frames_processed: int
+    reported_frames: int | None = None
+    decode_warnings: list[str] = Field(default_factory=list)
     tracked_observations: int
     total: int
     counts: dict[str, int]

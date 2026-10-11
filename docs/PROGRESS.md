@@ -19,3 +19,10 @@
 - Latest low-impact changes receive syntax and four standard-library pacing tests only. Prior 24-test/model/build evidence applies to the earlier revision.
 - CHECKPOINT_3_DASHBOARD=IMPLEMENTED_HTTP_VERIFIED_BROWSER_PENDING.
 - CHECKPOINT_4_RELEASE=PARTIAL: browser/cross-platform verification, clean dependency replay and latest-source production rebuild remain pending. No remote publication performed.
+
+
+## Small end-of-video discrepancy fix
+
+A real uploaded job failed after 462 decoded frames against 465 container-reported frames. The former strict check discarded exports before encoding. Container counts alone do not establish whether the tail is corrupt or the metadata is approximate. The fix accepts a discrepancy only when it is at most three frames AND at most 1% of the reported count, exports the actual decoded frames and shows an explicit partial-analysis warning in the existing dashboard. JSON now records reported_frames and decode_warnings. Larger gaps and empty videos still fail. Progress completion means the available-frame analysis/export finished, not that all reported frames were recovered.
+
+The old failed job retained only input.mp4 and preview.jpg; its results cannot be recovered without processing again. No input was modified, no job state was rewritten, and no automatic rerun/server restart was performed. Six standard-library regression cases and syntax validation are used for this change; full video validation is deferred to avoid laptop load.

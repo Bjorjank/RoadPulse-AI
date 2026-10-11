@@ -17,6 +17,7 @@ from roadpulse.budget import rest_after
 from roadpulse.detection.yolox import CLASSES, Detector
 from roadpulse.jobs.schemas import Results
 from roadpulse.jobs.store import Store
+from roadpulse.video.completeness import decode_warning
 
 
 class Cancelled(Exception):
@@ -131,11 +132,7 @@ def process_job(root, job_id):
         cap.release()
         writer.release()
         cap, writer = None, None
-        if not frames:
-            raise ValueError("Video contains no readable frames")
-        # Decode failure before the advertised final frame must not silently look complete.
-        if frames + 1 < job["total_frames"]:
-            raise ValueError(f"Video decode ended early: {frames}/{job['total_frames']} frames")
+        warning = decode_warning(frames, job["total_frames"])
         if store.get(job_id)["status"] == "CANCELLED":
             raise Cancelled()
         encode_start = time.perf_counter()
@@ -184,6 +181,8 @@ def process_job(root, job_id):
             "provider": detector.provider,
             "provider_warnings": detector.failures,
             "frames_processed": frames,
+            "reported_frames": job["total_frames"],
+            "decode_warnings": [warning] if warning else [],
             "tracked_observations": observations,
             "total": sum(counter.counts.values()),
             "counts": {name: counter.counts[name] for name in CLASSES.values()},
@@ -211,7 +210,12 @@ def process_job(root, job_id):
         (folder / "summary.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
         if store.get(job_id)["status"] == "CANCELLED":
             raise Cancelled()
-        store.update(job_id, status="COMPLETED", results=result, processed_frames=frames, progress=1.0)
+        # The existing built dashboard renders job.error, including this explicit
+        # partial-result warning; no frontend rebuild is needed to make it visible.
+        store.update(
+            job_id, status="COMPLETED", results=result, processed_frames=frames,
+            progress=1.0, error=warning,
+        )
     except Cancelled:
         if store.get(job_id)["status"] != "CANCELLED":
             store.update(job_id, status="CANCELLED")
