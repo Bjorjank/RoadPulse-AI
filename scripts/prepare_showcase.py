@@ -59,15 +59,19 @@ def get_demo_job(data):
         fatal("No SQLite job database found: " + str(db_file))
     with sqlite3.connect(db_file) as db:
         records = db.execute("SELECT payload FROM jobs ORDER BY rowid DESC").fetchall()
-    found = False
+    latest_failed = None
     for (payload,) in records:
         job = json.loads(payload)
         if Path(job.get("filename", "")).stem.casefold() == "demo":
-            found = True
             if job.get("status") == "COMPLETED":
                 return job
-    if found:
-        fatal("Found demo.mp4 jobs, but none completed successfully. Check their encoder logs.")
+            if latest_failed is None:
+                latest_failed = job
+    if latest_failed:
+        log = data / latest_failed["id"] / "encode.log"
+        tail = log.read_text(encoding="utf-8", errors="replace").splitlines()[-12:] if log.exists() else []
+        fatal("demo status=" + str(latest_failed.get("status")) + "; "
+              + str(latest_failed.get("error", "")) + "\n" + "\n".join(tail))
     fatal("No analyzed job named demo.mp4. Verify the filename in the dashboard.")
 
 
